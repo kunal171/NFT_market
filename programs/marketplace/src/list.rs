@@ -51,56 +51,42 @@ pub fn list(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    
-    msg!("Lamports transferred successfully.");
 
-    msg!("Creating buyer token account...");
-    msg!("Buyer Token Address: {}", &ctx.accounts.buyer_token_account.key());    
-    associated_token::create(
-        CpiContext::new(
-            ctx.accounts.associated_token_program.to_account_info(),
-            associated_token::Create {
-                payer: ctx.accounts.buyer_authority.to_account_info(),
-                associated_token: ctx.accounts.buyer_token_account.to_account_info(),
-                authority: ctx.accounts.buyer_authority.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-                system_program: ctx.accounts.system_program.to_account_info(),
-                token_program: ctx.accounts.token_program.to_account_info(),
-                rent: ctx.accounts.rent.to_account_info(),
-            },
-        ),
-    )?;
+    msg!("Escrow Token Address: {}", &ctx.accounts.escrow_ata.key());    
+    // associated_token::create(
+    //     CpiContext::new(
+    //         ctx.accounts.associated_token_program.to_account_info(),
+    //         associated_token::Create {
+    //             payer: ctx.accounts.buyer_authority.to_account_info(),
+    //             associated_token: ctx.accounts.buyer_token_account.to_account_info(),
+    //             authority: ctx.accounts.buyer_authority.to_account_info(),
+    //             mint: ctx.accounts.mint.to_account_info(),
+    //             system_program: ctx.accounts.system_program.to_account_info(),
+    //             token_program: ctx.accounts.token_program.to_account_info(),
+    //             rent: ctx.accounts.rent.to_account_info(),
+    //         },
+    //     ),
+    // )?;
 
     msg!("Transferring NFT...");
-    msg!("Owner Token Address: {}", &ctx.accounts.owner_token_account.key());    
-    msg!("Buyer Token Address: {}", &ctx.accounts.buyer_token_account.key());    
+    msg!("Owner Token Address: {}", &ctx.accounts.seller_token_account.key());    
+    msg!("Escrow Token Address: {}", &ctx.accounts.escrow_ata.key());    
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             token::Transfer {
-                from: ctx.accounts.owner_token_account.to_account_info(),
-                to: ctx.accounts.buyer_token_account.to_account_info(),
-                authority: ctx.accounts.owner_authority.to_account_info(),
+                from: ctx.accounts.seller_token_account.to_account_info(),
+                to: ctx.accounts.escrow_ata.to_account_info(),
+                authority: ctx.accounts.seller_wallet.to_account_info(),
             }
         ),
         1
     )?;
     msg!("NFT transferred successfully.");
-    
-    msg!("Sale completed successfully!");
 
     Ok(())
 }
-// fn find_pda(seeds, program_id) {
-//     for bump in 0..256 {
-//       let potential_pda = hash(seeds, bump, program_id);
-//       if is_pubkey(potential_pda) {
-//         continue;
-//       }
-//       return (potential_pda, bump);
-//     }
-//     panic!("Could not find pda after 256 tries.");
-// }
+
 #[account]
 pub struct Escrow {
     pub is_initialized: bool,
