@@ -3,32 +3,19 @@ use anchor_spl::token;
 use {
     anchor_lang::{
         prelude::*,
+        system_program,
     },
     anchor_spl::{
         associated_token::AssociatedToken,
         token::*,
     },
 };
+use crate::list::Escrow;
 
-
-pub fn list<'info>(
-    ctx: Context<ListNFT>,
-    expected_amount: u64
+pub fn list(
+    ctx: Context<CancelListing>
 ) -> Result<()> {
 
-    // msg!("Initiating transfer of {} lamports...", sale_lamports);
-    // msg!("Purchaser (sending lamports): {}", &ctx.accounts.buyer_authority.key());
-    // msg!("Seller (receiving lamports): {}", &ctx.accounts.owner_authority.key());
-    // system_program::transfer(
-    //     CpiContext::new(
-    //         ctx.accounts.system_program.to_account_info(),
-    //         system_program::Transfer {
-    //             from: ctx.accounts.buyer_authority.to_account_info(),
-    //             to: ctx.accounts.owner_authority.to_account_info(),
-    //         }
-    //     ),
-    //     sale_lamports
-    // )?;
     let nft_mint =  &ctx.accounts.mint;
     let seller_token_account = &ctx.accounts.seller_token_account;
     let seller_wallet = &ctx.accounts.seller_wallet;
@@ -38,13 +25,10 @@ pub fn list<'info>(
     let system_program = &ctx.accounts.system_program;
     let ata_program = &ctx.accounts.associated_token_program;
     let rent = &ctx.accounts.rent;
-    //*Assign values to the Escrow */
-    escrow.is_initialized = true;
-    escrow.seller_pubkey = seller_wallet.key();
-    escrow.token_account_pubkey = seller_token_account.key();
-    escrow.mint_key = nft_mint.key();
-    escrow.expected_amount = expected_amount;
-    escrow.bump = *ctx.bumps.get("marketplace").unwrap();
+
+    if escrow.seller_pubkey != seller_wallet.key() {
+        return Err(CancelError::AmountMismatch.into());
+    }
 
     // let token_account_state = token::state::Account::unpack(
     //     &**seller_token_account.data.borrow()
@@ -54,39 +38,41 @@ pub fn list<'info>(
     //     msg!("invalid NFT data ** ..");
     //     return Err(ProgramError::InvalidAccountData);
     // }
+
     msg!("Escrow Token Address: {}", &ctx.accounts.escrow_token_account.key());    
+    let seller_pubkey = escrow.seller_pubkey.key();
+
+    let escrow_signer_seeds = [
+            "marketplace".as_bytes(),
+            seller_pubkey.as_ref(),//* Wallet Key for the Signer
+            &[escrow.bump], //* Escrow bump
+    ];
 
     msg!("Transferring NFT...");
     msg!("Owner Token Address: {}", &ctx.accounts.seller_token_account.key());    
-    msg!("Escrow Token Address: {}", &ctx.accounts.escrow_token_account.key());    
+    msg!("Escrow Token Address: {}", &ctx.accounts.escrow_ata.key());    
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             token::Transfer {
-                from: ctx.accounts.seller_token_account.to_account_info(),
-                to: ctx.accounts.escrow_token_account.to_account_info(),
-                authority: ctx.accounts.seller_wallet.to_account_info(),
+                from: ctx.accounts.escrow_ata.to_account_info(),
+                to: ctx.accounts.seller_token_account.to_account_info(),
+                authority: ctx.accounts.escrow.to_account_info(),
             }
+            &[&escrow_signer_seeds],
         ),
         1
     )?;
-    msg!("NFT transferred successfully.");
+    msg!("NFT withdraw successfully.");
+        //*Assign values to the Escrow */
+        escrow.is_initialized = false;
+        escrow.seller_pubkey = seller_wallet.key();
 
     Ok(())
 }
 
-#[account]
-pub struct Escrow {
-    pub is_initialized: bool,
-    pub seller_pubkey: Pubkey,
-    pub token_account_pubkey: Pubkey,
-    pub mint_key: Pubkey,
-    pub expected_amount: u64,
-    pub bump: u8,
-}
-
 #[derive(Accounts)]
-pub struct ListNFT<'info> {
+pub struct CancelListing<'info> {
     #[account(mut)]
     pub mint: Account<'info, token::Mint>,
     #[account(mut)]
@@ -95,14 +81,16 @@ pub struct ListNFT<'info> {
     pub seller_wallet: Signer<'info>,
     #[account(mut)]
     pub escrow_token_account: Account<'info, TokenAccount>,
-    #[account(init,
-        payer = seller_token_account,
-        space = 8+ 1 + 32 + 32 + 32 + 8 + 4 + 220, seeds = [b"marketplace", seller_wallet.key().as_ref()],
-        bump
-    )]
+    #[account(mut)]
     pub escrow: Account<'info, Escrow>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
     pub associated_token_program: Program<'info, TokenAccount>,
 }
+
+#[error]
+pub enum CancelError {
+    #[msg("WrongListerMismatch")]//301
+    WrongListerMismatch,
+}  
