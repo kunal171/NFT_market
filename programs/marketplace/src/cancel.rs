@@ -7,12 +7,13 @@ use {
     },
     anchor_spl::{
         associated_token::AssociatedToken,
-        token::*,
+        token::{Mint, Token, TokenAccount},
     },
 };
+
 use crate::list::Escrow;
 
-pub fn list(
+pub fn cancel(
     ctx: Context<CancelListing>
 ) -> Result<()> {
 
@@ -27,7 +28,7 @@ pub fn list(
     let rent = &ctx.accounts.rent;
 
     if escrow.seller_pubkey != seller_wallet.key() {
-        return Err(CancelError::AmountMismatch.into());
+        return Err(CancelError::WrongListerMismatch.into());
     }
 
     // let token_account_state = token::state::Account::unpack(
@@ -50,16 +51,15 @@ pub fn list(
 
     msg!("Transferring NFT...");
     msg!("Owner Token Address: {}", &ctx.accounts.seller_token_account.key());    
-    msg!("Escrow Token Address: {}", &ctx.accounts.escrow_ata.key());    
+    msg!("Escrow Token Address: {}", &ctx.accounts.escrow_token_account.key());    
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             token::Transfer {
-                from: ctx.accounts.escrow_ata.to_account_info(),
+                from: ctx.accounts.escrow_token_account.to_account_info(),
                 to: ctx.accounts.seller_token_account.to_account_info(),
-                authority: ctx.accounts.escrow.to_account_info(),
+                authority: ctx.accounts.escrow_token_account.to_account_info(),
             }
-            &[&escrow_signer_seeds],
         ),
         1
     )?;
@@ -85,11 +85,11 @@ pub struct CancelListing<'info> {
     pub escrow: Account<'info, Escrow>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, token::Token>,
-    pub associated_token_program: Program<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
-#[error]
+#[error_code]
 pub enum CancelError {
     #[msg("WrongListerMismatch")]//301
     WrongListerMismatch,
